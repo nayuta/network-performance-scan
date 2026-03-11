@@ -55,6 +55,7 @@ fi
 # ---------- HELPERS ----------
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG_FILE" >&2; }
 section() { echo "" | tee -a "$LOG_FILE" >&2; echo "========== $* ==========" | tee -a "$LOG_FILE" >&2; }
+banner() { echo "$*" | tee -a "$LOG_FILE" >&2; }
 
 detect_os() {
   case "$(uname -s)" in
@@ -186,17 +187,17 @@ run_scan() {
 }
 
 # ---------- LOOP ----------
-echo "================================================"
-echo " Network Scanner"
-echo " iPerf3   : $IPERF_SERVER:$IPERF_PORT"
+banner "================================================"
+banner " Network Scanner"
+banner " iPerf3   : $IPERF_SERVER:$IPERF_PORT"
 if [ "$ONCE" = true ]; then
-echo " Mode     : single scan"
+banner " Mode     : single scan"
 else
-echo " Interval : ${INTERVAL}s"
+banner " Interval : ${INTERVAL}s"
 fi
-echo " Logs     : $LOG_DIR"
-echo "================================================"
-echo ""
+banner " Logs     : $LOG_DIR"
+banner "================================================"
+banner ""
 
 if [ "$ONCE" = true ]; then
   run_scan
