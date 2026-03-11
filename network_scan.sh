@@ -143,12 +143,16 @@ run_scan() {
   section "SCAN @ $ts"
   log "Logging to: $LOG_FILE"
 
-  # Ping all targets
+  # Ping all targets - use indexed arrays for bash 3.2 compatibility
   section "PING TESTS"
-  declare -A ping_results
+  local ping_avg=()
+  local ping_loss=()
+  local i=0
   for target in "${PING_TARGETS[@]}"; do
     read -r avg loss <<< $(run_ping "$target")
-    ping_results[$target]="$avg $loss"
+    ping_avg[$i]="$avg"
+    ping_loss[$i]="$loss"
+    i=$((i + 1))
   done
 
   # DNS
@@ -165,9 +169,10 @@ run_scan() {
 
   # Write single summary CSV row for this scan
   local csv_row="$ts"
+  i=0
   for target in "${PING_TARGETS[@]}"; do
-    read -r avg loss <<< ${ping_results[$target]}
-    csv_row="${csv_row},${avg},${loss}"
+    csv_row="${csv_row},${ping_avg[$i]},${ping_loss[$i]}"
+    i=$((i + 1))
   done
   csv_row="${csv_row},${dns_ms},${iperf_mbps}"
   echo "$csv_row" >> "$SUMMARY_FILE"
