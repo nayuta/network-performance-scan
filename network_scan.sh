@@ -2,7 +2,7 @@
 # ============================================================
 # network_scan.sh — Periodic network diagnostic script
 # Compatible with: macOS, Linux, WSL
-# Usage: ./network_scan.sh --iperf-server <IP> [--interval 300] [--port 5201] [--once]
+# Usage: ./network_scan.sh --iperf-server <IP> [--interval 300] [--port 5201] [--once] [--iperf-retries 3] [--iperf-retry-delay 5]
 # ============================================================
 
 # ---------- CONFIG ----------
@@ -14,6 +14,8 @@ DNS_TARGET="google.com"
 INTERVAL=300                    # Seconds between scans (default: 5 min)
 LOG_DIR="./network_logs"
 ONCE=false
+IPERF_RETRIES=3              # Retry attempts for iperf3
+IPERF_RETRY_DELAY=5          # Seconds between retries
 # ----------------------------
 
 # Parse CLI args
@@ -23,6 +25,8 @@ while [[ "$#" -gt 0 ]]; do
     --iperf-server) IPERF_SERVER="$2"; shift ;;
     --port) IPERF_PORT="$2"; shift ;;
     --once) ONCE=true ;;
+    --iperf-retries) IPERF_RETRIES="$2"; shift ;;
+    --iperf-retry-delay) IPERF_RETRY_DELAY="$2"; shift ;;
     *) echo "Unknown param: $1"; exit 1 ;;
   esac
   shift
@@ -31,7 +35,7 @@ done
 # Require --iperf-server
 if [ -z "$IPERF_SERVER" ]; then
   echo "Error: --iperf-server <IP> is required"
-  echo "Usage: $0 --iperf-server <IP> [--interval 300] [--port 5201] [--once]"
+  echo "Usage: $0 --iperf-server <IP> [--interval 300] [--port 5201] [--once] [--iperf-retries 3] [--iperf-retry-delay 5]"
   exit 1
 fi
 
@@ -124,18 +128,27 @@ run_iperf() {
     return
   fi
 
-  local result
-  result=$(iperf3 -c "$IPERF_SERVER" -p "$IPERF_PORT" -t 10 --connect-timeout 5000 2>&1)
+  local result attempt
+  for attempt in $(seq 1 "$IPERF_RETRIES"); do
+    result=$(iperf3 -c "$IPERF_SERVER" -p "$IPERF_PORT" -t 10 --connect-timeout 5000 2>&1)
 
-  if echo "$result" | grep -q "error\|failed\|unable\|Connection refused"; then
-    log "  iperf3 → could not connect to $IPERF_SERVER:$IPERF_PORT"
-    echo "N/A"
-  else
-    local mbps
-    mbps=$(echo "$result" | grep -E "sender|receiver" | tail -1 | awk '{print $(NF-2)}')
-    log "  iperf3 throughput: ${mbps} Mbits/sec"
-    echo "$mbps"
-  fi
+    if echo "$result" | grep -q "error\|failed\|unable\|Connection refused"; then
+      if [ "$attempt" -lt "$IPERF_RETRIES" ]; then
+        log "  iperf3 → attempt $attempt/$IPERF_RETRIES failed, retrying in ${IPERF_RETRY_DELAY}s..."
+        sleep "$IPERF_RETRY_DELAY"
+      else
+        log "  iperf3 → could not connect to $IPERF_SERVER:$IPERF_PORT after $IPERF_RETRIES attempts"
+        echo "N/A"
+        return
+      fi
+    else
+      local mbps
+      mbps=$(echo "$result" | grep -E "sender|receiver" | tail -1 | awk '{print $(NF-2)}')
+      log "  iperf3 throughput: ${mbps} Mbits/sec"
+      echo "$mbps"
+      return
+    fi
+  done
 }
 
 # ---------- MAIN SCAN ----------
